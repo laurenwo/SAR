@@ -47,7 +47,7 @@ class PickleCompressorDecompressor(CompressorDecompressorBase):
     def __init__(self):
         super().__init__()
 
-    def compress(self, tensors_l: List[Tensor], rank:int = 0, iter: int = 0):
+    def compress(self, tensors_l: List[Tensor], iter: int = 0):
         compressed_tensors_l = [torch.tensor(np.frombuffer(pickle.dumps(t), dtype=np.uint8)) for t in tensors_l]
         return compressed_tensors_l
 
@@ -59,7 +59,7 @@ class Bz2CompressorDecompressor(CompressorDecompressorBase):
     def __init__(self):
         super().__init__()
 
-    def compress(self, tensors_l: List[Tensor], rank:int = 0, iter: int = 0):
+    def compress(self, tensors_l: List[Tensor], iter: int = 0):
         compressed_tensors_l = [torch.tensor(np.frombuffer(bz2.compress(pickle.dumps(t)), dtype=np.uint8)) for t in tensors_l]
         return compressed_tensors_l
 
@@ -71,7 +71,7 @@ class ZlibCompressorDecompressor(CompressorDecompressorBase):
     def __init__(self):
         super().__init__()
 
-    def compress(self, tensors_l: List[Tensor], rank:int = 0, iter: int = 0):
+    def compress(self, tensors_l: List[Tensor], iter: int = 0):
         compressed_tensors_l = [torch.tensor(np.frombuffer(zlib.compress(pickle.dumps(t)), dtype=np.uint8)) for t in tensors_l]
         return compressed_tensors_l
 
@@ -83,34 +83,13 @@ class LZMACompressorDecompressor(CompressorDecompressorBase):
     def __init__(self):
         super().__init__()
 
-    def compress(self, tensors_l: List[Tensor], rank:int = 0, iter: int = 0):
+    def compress(self, tensors_l: List[Tensor], iter: int = 0):
         compressed_tensors_l = [torch.tensor(np.frombuffer(lzma.compress(pickle.dumps(t)), dtype=np.uint8)) for t in tensors_l]
         return compressed_tensors_l
 
     def decompress(self, channel_feat: List[Tensor], iter: int = 0):
         tensors_l = [pickle.loads(lzma.decompress(f.numpy().tobytes())) for f in channel_feat]
         return tensors_l
-
-# class Bz2CompressorDecompressor(CompressorDecompressorBase):
-#     def __init__(self):
-#         super().__init__()
-#         self.size = -1
-
-#     def compress(self, tensors_l: List[Tensor], rank:int = 0, requires_grad:boolean=False, iter: int = 0):
-#         self.size = tensors_l[0].size()[-1]
-#         if requires_grad:
-#             compressed_tensors_l = [torch.tensor(np.frombuffer(bz2.compress(t.detach().numpy().tobytes()), dtype=np.uint8)) for t in tensors_l]
-#         else:
-#             compressed_tensors_l = [torch.tensor(np.frombuffer(bz2.compress(t.numpy().tobytes()), dtype=np.uint8)) for t in tensors_l]
-#         return compressed_tensors_l
-
-#     def decompress(self, channel_feat: List[Tensor], requires_grad:boolean=False, iter: int = 0):
-#         tensors_l = [np.frombuffer(bz2.decompress(f.numpy().tobytes()), dtype=np.float32) for f in channel_feat]
-#         if requires_grad:
-#             tensors_l = [torch.tensor(np.reshape(t, (-1, self.size))).requires_grad_() for t in tensors_l]
-#         else:
-#             tensors_l = [torch.tensor(np.reshape(t, (-1, self.size))) for t in tensors_l]
-#         return tensors_l
 
 class FeatureCompressorDecompressor(CompressorDecompressorBase):
     def __init__(self, feature_dim: List[int], comp_ratio: List[float]):
@@ -141,7 +120,7 @@ class FeatureCompressorDecompressor(CompressorDecompressorBase):
                 nn.Linear(k, f)
             )
     
-    def compress(self, tensors_l: List[Tensor], rank:int=0,  iter: int = 0, scorer_type=None):
+    def compress(self, tensors_l: List[Tensor], iter: int = 0, scorer_type=None):
         '''
         Take a list of tensors and return a list of compressed tensors
 
@@ -219,7 +198,6 @@ class NodeCompressorDecompressor(CompressorDecompressorBase):
     def compress(
         self, 
         tensors_l: List[Tensor],
-        rank: int = 0, 
         iter: int = 0,
         scorer_type: str = "learnable"):
         """
@@ -407,7 +385,6 @@ class SubgraphCompressorDecompressor(CompressorDecompressorBase):
     def compress(
         self, 
         tensors_l: List[Tensor],
-        rank: int=0,
         iter: int = 0,
         scorer_type=None):
         """

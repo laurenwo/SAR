@@ -98,10 +98,10 @@ parser.add_argument(
 parser.add_argument('--gnn-layer', default='sage', type=str, choices=['gcn', 'sage', 'gat'],
                     help='GNN layer type')
 
-parser.add_argument('--rank', default=0, type=int,
+parser.add_argument('--rank', default=-1, type=int,
                     help='Rank of the current worker ')
 
-parser.add_argument('--world-size', default=2, type=int,
+parser.add_argument('--world-size', default=-1, type=int,
                     help='Number of workers ')
 
 parser.add_argument('--n-layers', default=3, type=int,
@@ -126,12 +126,12 @@ parser.add_argument('--enable_cr', action='store_true',
                     default=False, help="Turn on compression before \
                     sending to remote clients")
 
-parser.add_argument('--comp_ratio', default=1.5, type=int,
+parser.add_argument('--comp_ratio', default=None, type=int,
                     help="Compression ratio for sub-graph based compression")
 
 parser.add_argument('--compression_type', default="bz2_feature", type=str,
                     choices=["zlib_feature", "lzma_feature", "bz2_feature", "pickle_feature", "lossy_feature", "node", "subgraph"],
-                    help="Choose among three possible compression types")
+                    help="Choose among compression types")
 
 parser.add_argument('--enable_vcr', action='store_true',
                     default=False, help="Turn on variable compression ratio")
