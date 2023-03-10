@@ -18,6 +18,12 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+import sys
+sys.path.append('/venv/lib/python3.8/site-packages/oneccl_bindings_for_pytorch')
+
+import torch
+import oneccl_bindings_for_pytorch
+
 from typing import List, Union, Dict
 from argparse import ArgumentParser
 import os
@@ -47,7 +53,7 @@ parser.add_argument('--ip-file', default='./ip_file', type=str,
                     help='File with ip-address. Worker 0 creates this file and all others read it ')
 
 
-parser.add_argument('--backend', default='nccl', type=str, choices=['ccl', 'nccl', 'mpi'],
+parser.add_argument('--backend', default='ccl', type=str, choices=['ccl', 'nccl', 'mpi'],
                     help='Communication backend to use '
                     )
 
@@ -115,7 +121,7 @@ def main():
 
     # Load DGL partition data
     partition_data = sar.load_dgl_partition_data(
-        args.partitioning_json_file, args.rank, device)
+        args.partitioning_json_file, args.rank, False, device)
 
     # Obtain train,validation, and test masks
     # These are stored as node features. Partitioning may prepend

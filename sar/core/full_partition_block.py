@@ -82,28 +82,27 @@ class ProxyDataView(MutableMapping):
             logger.debug(f'compression decompression: {rank()}')
             send_tensors = [(value[ind] if worker_idx != rank() else value[[]])
                             for worker_idx, ind in enumerate(self.indices_required_from_me)]
-            corrected_sizes_expected_from_others = self.sizes_expected_from_others[:]
-            corrected_sizes_expected_from_others[rank()] = 0
-
+        
             if Config.enable_cr:
+                pre_size = [t.element_size() * t.nelement() for t in send_tensors]
                 compressed_send_tensors = self.dist_block.compression_decompression.compress(
-                    send_tensors, iter=Config.train_iter)
+                    send_tensors, rank=rank(), iter=Config.train_iter)
+                post_size = [t.element_size() * t.nelement() for t in compressed_send_tensors]
+                print("compression rate: ", [s1 / s2 for s1, s2 in zip(pre_size, post_size)])
 
-                #t1 = time.time()
-                compressed_recv_tensors = simple_exchange_op(corrected_sizes_expected_from_others,
-                                                             *compressed_send_tensors)
-                #comm_time = time.time() - t1
-                # print(f'simple exchange tensors with sizes \
-                # {compressed_send_tensors[0].size()} in {comm_time}', flush=True)
+                t1 = time.time()
+                compressed_recv_tensors = simple_exchange_op(*compressed_send_tensors)
+                comm_time = time.time() - t1
+                print(f'simple exchange tensors with sizes \
+                {compressed_send_tensors[0].size()} in {comm_time}', flush=True)
                 recv_tensors = self.dist_block.compression_decompression.decompress(
                     compressed_recv_tensors)
             else:
-                #t1 = time.time()
-                recv_tensors = simple_exchange_op(
-                    corrected_sizes_expected_from_others, *send_tensors)
-                #comm_time = time.time() - t1
-                # print(f'simple exchange tensors with sizes \
-                # {send_tensors[0].size()} in {comm_time}', flush=True)
+                t1 = time.time()
+                recv_tensors = simple_exchange_op(*send_tensors)
+                comm_time = time.time() - t1
+                print(f'simple exchange tensors with sizes \
+                {send_tensors[0].size()} in {comm_time}', flush=True)
 
             recv_tensors = list(recv_tensors)
             recv_tensors[rank()
@@ -229,14 +228,8 @@ class SimpleExchangeOp(torch.autograd.Function):  # pylint: disable = abstract-m
     @ staticmethod
     # pylint: disable = arguments-differ,unused-argument
     # type: ignore
-    def forward(ctx, sizes_expected_from_others: Tensor, *send_tensors) -> Tuple[Tensor, ...]:
-        ctx.sizes_expected_from_others = sizes_expected_from_others
-        ctx.sizes_expected_from_me = [x.size(0) for x in send_tensors]
-        send_tensors = [x.detach() for x in send_tensors]
-        recv_tensors = [send_tensors[0].new(sz_from_others, *send_tensors[0].size()[1:])
-                        for sz_from_others in sizes_expected_from_others]
-
-        all_to_all(recv_tensors, send_tensors, move_to_comm_device=True)
+    def forward(ctx, *send_tensors) -> Tuple[Tensor, ...]:
+        recv_tensors = exchange_tensors(send_tensors)
         return tuple(recv_tensors)
 
     @ staticmethod
@@ -244,12 +237,8 @@ class SimpleExchangeOp(torch.autograd.Function):  # pylint: disable = abstract-m
     # type: ignore
     def backward(ctx, *grad):
         send_tensors = list(grad)
-        recv_tensors = [send_tensors[0].new(sz_from_me, *send_tensors[0].size()[1:])
-                        for sz_from_me in ctx.sizes_expected_from_me]
-
-        all_to_all(recv_tensors, send_tensors, move_to_comm_device=True)
-
-        return tuple([None] + recv_tensors)
+        recv_tensors = exchange_tensors(send_tensors)
+        return tuple(recv_tensors)
 
 
 simple_exchange_op = SimpleExchangeOp.apply

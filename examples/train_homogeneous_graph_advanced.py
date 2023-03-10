@@ -29,10 +29,14 @@ from torch import nn
 import torch.distributed as dist
 #from torch.utils.tensorboard import SummaryWriter
 import dgl  # type: ignore
+import numpy as np
+import pandas as pd
 
 import sar
 from sar.core.compressor import \
     FeatureCompressorDecompressor, NodeCompressorDecompressor, SubgraphCompressorDecompressor
+from sar.core.compressor import PickleCompressorDecompressor, Bz2CompressorDecompressor
+from sar.core.compressor import ZlibCompressorDecompressor, LZMACompressorDecompressor
 from sar.config import Config
 
 
@@ -43,7 +47,7 @@ parser = ArgumentParser(
 parser.add_argument(
     "--partitioning-json-file",
     type=str,
-    default="",
+    default="./partition_data/ogbn-arxiv.json",
     help="Path to the .json file containing partitioning information "
 )
 
@@ -69,7 +73,7 @@ parser.add_argument(
     help="Run on CPUs if set, otherwise run on GPUs "
 )
 
-parser.add_argument('--train-mode', default='SAR',
+parser.add_argument('--train-mode', default='one_shot_aggregation',
                     type=str,
                     choices=['SAR', 'SA', 'one_shot_aggregation'],
                     help='Training mode to use: SAR (Sequential Aggregation and \
@@ -94,10 +98,10 @@ parser.add_argument(
 parser.add_argument('--gnn-layer', default='sage', type=str, choices=['gcn', 'sage', 'gat'],
                     help='GNN layer type')
 
-parser.add_argument('--rank', default=-1, type=int,
+parser.add_argument('--rank', default=0, type=int,
                     help='Rank of the current worker ')
 
-parser.add_argument('--world-size', default=-1, type=int,
+parser.add_argument('--world-size', default=2, type=int,
                     help='Number of workers ')
 
 parser.add_argument('--n-layers', default=3, type=int,
@@ -122,11 +126,11 @@ parser.add_argument('--enable_cr', action='store_true',
                     default=False, help="Turn on compression before \
                     sending to remote clients")
 
-parser.add_argument('--comp_ratio', default=None, type=int,
+parser.add_argument('--comp_ratio', default=1.5, type=int,
                     help="Compression ratio for sub-graph based compression")
 
-parser.add_argument('--compression_type', default="feature", type=str,
-                    choices=["feature", "node", "subgraph"],
+parser.add_argument('--compression_type', default="bz2_feature", type=str,
+                    choices=["zlib_feature", "lzma_feature", "bz2_feature", "pickle_feature", "lossy_feature", "node", "subgraph"],
                     help="Choose among three possible compression types")
 
 parser.add_argument('--enable_vcr', action='store_true',
@@ -272,7 +276,8 @@ def train_pass(gnn_model: torch.nn.Module,
     gnn_model.train()
     t1 = time.time()
     logits = gnn_model(train_blocks, features)
-    print('forward time ', time.time() - t1, flush=True)
+    forward_time = time.time() - t1
+    print('forward time ', forward_time, flush=True)
 
     if mfg_blocks:
         # By construction, the output nodes of the top layer training MFG are
@@ -286,7 +291,8 @@ def train_pass(gnn_model: torch.nn.Module,
     optimizer.zero_grad()
     t1 = time.time()
     loss.backward()
-    print('backward time ', time.time() - t1, flush=True)
+    backward_time = time.time() - t1
+    print('backward time ', backward_time, flush=True)
     # Do not forget to gather the parameter gradients from all workers
     t1 = time.time()
     if (train_iter_idx + 1) % fed_agg_round == 0:
@@ -294,6 +300,8 @@ def train_pass(gnn_model: torch.nn.Module,
         print("Aggregating models across clients", flush=True)
     print(f'gather grad time : ', time.time() - t1, flush=True)
     optimizer.step()
+
+    return forward_time, backward_time
 
 
 def main():
@@ -411,7 +419,15 @@ def main():
             full_graph_manager = full_graph_manager.get_full_partition_graph()
             feature_dim = [features.size(
                 1)] + [args.layer_dim] * (args.n_layers - 2) + [num_labels]
-            if args.compression_type == "feature":
+            if args.compression_type == "pickle_feature":
+                comp_mod = PickleCompressorDecompressor()
+            elif args.compression_type == "bz2_feature":
+                comp_mod = Bz2CompressorDecompressor()
+            elif args.compression_type == "zlib_feature":
+                comp_mod = ZlibCompressorDecompressor()
+            elif args.compression_type == "lzma_feature":
+                comp_mod = LZMACompressorDecompressor()
+            elif args.compression_type == "lossy_feature":
                 comp_mod = FeatureCompressorDecompressor(
                     feature_dim=feature_dim,
                     comp_ratio=[float(args.comp_ratio)] * args.n_layers
@@ -474,21 +490,30 @@ def main():
     optimizer = torch.optim.Adam(gnn_model.parameters(), lr=args.lr)
     best_val_acc = torch.Tensor(0)
     model_acc = torch.Tensor(0)
+    df = pd.DataFrame(np.zeros(shape=(args.train_iters, 12)), 
+                      columns = ["iter", "forward", "backward", "train", "infer",
+                                 "train_loss", "val_loss", "test_loss",
+                                 "train_acc", "val_acc", "test_acc", "model_acc"])
     for train_iter_idx in range(args.train_iters):
+        df.at[train_iter_idx, "iter"] = train_iter_idx
         t_1 = time.time()
         Config.train_iter = train_iter_idx
-        train_pass(gnn_model,
-                   optimizer,
-                   train_blocks,
-                   features,
-                   masks['train_indices'],
-                   labels,
-                   n_train_points,
-                   args.construct_mfgs,
-                   train_iter_idx=train_iter_idx,
-                   fed_agg_round=args.fed_agg_round)
+        forward_time, backward_time = train_pass(gnn_model,
+                                                optimizer,
+                                                train_blocks,
+                                                features,
+                                                masks['train_indices'],
+                                                labels,
+                                                n_train_points,
+                                                args.construct_mfgs,
+                                                train_iter_idx=train_iter_idx,
+                                                fed_agg_round=args.fed_agg_round)
         train_time = time.time() - t_1
+        df.at[train_iter_idx, "forward"] = forward_time
+        df.at[train_iter_idx, "backward"] = backward_time
+        df.at[train_iter_idx, "train"] = train_time 
 
+        t_1 = time.time()
         (train_loss, train_acc, val_loss, val_acc, test_loss, test_acc) = \
             infer_pass(gnn_model,
                        eval_blocks,
@@ -496,6 +521,8 @@ def main():
                        masks,
                        labels,
                        args.construct_mfgs)
+        infer_time = time.time() - t_1
+        df.at[train_iter_idx, "infer"] = infer_time
 
         if train_iter_idx == 0:
             best_val_acc = val_acc
@@ -522,6 +549,17 @@ def main():
             f" |"
         ])
         print(result_message, flush=True)
+
+        df.at[train_iter_idx, "train_loss"] = train_loss.item()
+        df.at[train_iter_idx, "val_loss"] = val_loss.item()
+        df.at[train_iter_idx, "test_loss"] = test_loss.item()
+        df.at[train_iter_idx, "train_acc"] = train_acc.item()
+        df.at[train_iter_idx, "val_acc"] = val_acc.item()
+        df.at[train_iter_idx, "test_acc"] = test_acc .item()
+        df.at[train_iter_idx, "model_acc"] = model_acc.item()
+
+    # fname = "results/bz2_"+ str(args.rank) + ".csv" 
+    # df.to_csv(fname, index=False)
 
 
 if __name__ == '__main__':

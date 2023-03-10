@@ -8,3 +8,7 @@ log/
 */examples/log/
 datasets/*
 *txt
+
+results/
+docker/
+ip_file

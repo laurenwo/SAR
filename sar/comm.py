@@ -168,10 +168,10 @@ def initialize_comms(_rank: int, _world_size: int, master_ip_address: str,
 
     if backend == 'ccl':
         # pylint: disable=unused-import
-        try:
-            import torch_ccl  # type: ignore
-        except ImportError:
-            import oneccl_bindings_for_pytorch
+        # try:
+        #     import torch_ccl  # type: ignore
+        # except ImportError:
+        import oneccl_bindings_for_pytorch
 
     os.environ['MASTER_ADDR'] = master_ip_address
     os.environ['MASTER_PORT'] = str(master_port_number)
