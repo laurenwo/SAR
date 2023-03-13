@@ -490,12 +490,14 @@ def main():
     optimizer = torch.optim.Adam(gnn_model.parameters(), lr=args.lr)
     best_val_acc = torch.Tensor(0)
     model_acc = torch.Tensor(0)
-    df = pd.DataFrame(np.zeros(shape=(args.train_iters, 12)), 
+    df = pd.DataFrame(np.zeros(shape=(args.train_iters, 14)), 
                       columns = ["iter", "forward", "backward", "train", "infer",
                                  "train_loss", "val_loss", "test_loss",
-                                 "train_acc", "val_acc", "test_acc", "model_acc"])
+                                 "train_acc", "val_acc", "test_acc", 
+                                 "compression_rate_1", "compression_rate_2", "compression_rate_3"])
     for train_iter_idx in range(args.train_iters):
         df.at[train_iter_idx, "iter"] = train_iter_idx
+        full_graph_manager._compression_decompression.compression_rate = []
         t_1 = time.time()
         Config.train_iter = train_iter_idx
         forward_time, backward_time = train_pass(gnn_model,
@@ -509,9 +511,13 @@ def main():
                                                 train_iter_idx=train_iter_idx,
                                                 fed_agg_round=args.fed_agg_round)
         train_time = time.time() - t_1
+        print("compression rates: ", full_graph_manager._compression_decompression.compression_rate)
         df.at[train_iter_idx, "forward"] = forward_time
         df.at[train_iter_idx, "backward"] = backward_time
         df.at[train_iter_idx, "train"] = train_time 
+        df.at[train_iter_idx, "compression_rate_1"] = full_graph_manager._compression_decompression.compression_rate[0]
+        df.at[train_iter_idx, "compression_rate_2"] = full_graph_manager._compression_decompression.compression_rate[1]
+        df.at[train_iter_idx, "compression_rate_3"] = full_graph_manager._compression_decompression.compression_rate[2]
 
         t_1 = time.time()
         (train_loss, train_acc, val_loss, val_acc, test_loss, test_acc) = \
@@ -558,8 +564,8 @@ def main():
         df.at[train_iter_idx, "test_acc"] = test_acc .item()
         df.at[train_iter_idx, "model_acc"] = model_acc.item()
 
-    # fname = "results/bz2_"+ str(args.rank) + ".csv" 
-    # df.to_csv(fname, index=False)
+    fname = "results/bz2_"+ str(args.rank) + ".csv" 
+    df.to_csv(fname, index=False)
 
 
 if __name__ == '__main__':

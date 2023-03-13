@@ -84,11 +84,11 @@ class ProxyDataView(MutableMapping):
                             for worker_idx, ind in enumerate(self.indices_required_from_me)]
         
             if Config.enable_cr:
-                pre_size = [t.element_size() * t.nelement() for t in send_tensors]
+                # pre_size = [t.element_size() * t.nelement() for t in send_tensors]
                 compressed_send_tensors = self.dist_block.compression_decompression.compress(
-                    send_tensors, rank=rank(), iter=Config.train_iter)
-                post_size = [t.element_size() * t.nelement() for t in compressed_send_tensors]
-                print("compression rate: ", [s1 / s2 for s1, s2 in zip(pre_size, post_size)])
+                    send_tensors, iter=Config.train_iter)
+                # post_size = [t.element_size() * t.nelement() for t in compressed_send_tensors]
+                # print("compression rate: ", [s1 / s2 for s1, s2 in zip(pre_size, post_size)])
 
                 t1 = time.time()
                 compressed_recv_tensors = simple_exchange_op(*compressed_send_tensors)

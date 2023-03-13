@@ -58,9 +58,14 @@ class PickleCompressorDecompressor(CompressorDecompressorBase):
 class Bz2CompressorDecompressor(CompressorDecompressorBase):
     def __init__(self):
         super().__init__()
+        self.compression_rate = []
 
     def compress(self, tensors_l: List[Tensor], iter: int = 0):
+        pre_size = [t.element_size() * t.nelement() for t in tensors_l]
         compressed_tensors_l = [torch.tensor(np.frombuffer(bz2.compress(pickle.dumps(t)), dtype=np.uint8)) for t in tensors_l]
+        post_size = [t.element_size() * t.nelement() for t in compressed_tensors_l]
+        compression_rate = sum([s1 / s2 for s1, s2 in zip(pre_size, post_size)])
+        self.compression_rate.append(compression_rate)
         return compressed_tensors_l
 
     def decompress(self, channel_feat: List[Tensor], iter: int = 0):
@@ -70,9 +75,14 @@ class Bz2CompressorDecompressor(CompressorDecompressorBase):
 class ZlibCompressorDecompressor(CompressorDecompressorBase):
     def __init__(self):
         super().__init__()
+        self.compression_rate = []
 
     def compress(self, tensors_l: List[Tensor], iter: int = 0):
+        pre_size = [t.element_size() * t.nelement() for t in tensors_l]
         compressed_tensors_l = [torch.tensor(np.frombuffer(zlib.compress(pickle.dumps(t)), dtype=np.uint8)) for t in tensors_l]
+        post_size = [t.element_size() * t.nelement() for t in compressed_tensors_l]
+        compression_rate = sum([s1 / s2 for s1, s2 in zip(pre_size, post_size)])
+        self.compression_rate.append(compression_rate)
         return compressed_tensors_l
 
     def decompress(self, channel_feat: List[Tensor], iter: int = 0):
@@ -82,9 +92,14 @@ class ZlibCompressorDecompressor(CompressorDecompressorBase):
 class LZMACompressorDecompressor(CompressorDecompressorBase):
     def __init__(self):
         super().__init__()
+        self.compression_rate = []
 
     def compress(self, tensors_l: List[Tensor], iter: int = 0):
+        pre_size = [t.element_size() * t.nelement() for t in tensors_l]
         compressed_tensors_l = [torch.tensor(np.frombuffer(lzma.compress(pickle.dumps(t)), dtype=np.uint8)) for t in tensors_l]
+        post_size = [t.element_size() * t.nelement() for t in compressed_tensors_l]
+        compression_rate = sum([s1 / s2 for s1, s2 in zip(pre_size, post_size)])
+        self.compression_rate.append(compression_rate)
         return compressed_tensors_l
 
     def decompress(self, channel_feat: List[Tensor], iter: int = 0):
