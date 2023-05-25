@@ -4,10 +4,13 @@ from typing import List, Tuple
 import logging
 from xmlrpc.client import boolean
 import dgl
+import time
 
 import numpy as np
 import bz2, lzma, zlib
 import pickle
+# import mgzip
+from multiprocessing import Pool
 
 from collections.abc import MutableMapping
 from numpy import append
@@ -19,6 +22,11 @@ from sar.comm import exchange_tensors, rank
 from sar.config import Config
 from sar.core.custom_models import SageConvExt
 
+from torch.utils.cpp_extension import load
+mt_compress = load(name="mt_compress", 
+                   sources=["sar/core/compression/mt_compress.cpp"],
+                   extra_cflags=['-fopenmp'])
+
 logger = logging.getLogger(__name__)
 
 
@@ -27,8 +35,7 @@ class CompressorDecompressorBase(nn.Module):
     Base class for all communication compression modules
     '''
 
-    def __init__(
-        self):
+    def __init__(self):
         super().__init__()
 
     def compress(self, tensors_l: List[Tensor]):
@@ -54,6 +61,67 @@ class PickleCompressorDecompressor(CompressorDecompressorBase):
     def decompress(self, channel_feat: List[Tensor], iter: int = 0):
         tensors_l = [pickle.loads(f.numpy().tobytes()) for f in channel_feat]
         return tensors_l
+
+class MT_GZipCompressorDecompressor(CompressorDecompressorBase):
+    def __init__(self):
+        super().__init__()
+        self.n_partitions = 10
+        self.partition_axis = 1
+        self.compression_rate = []
+
+    def compress(self, tensors_l: List[Tensor], iter: int = 0):
+        partitioned_tensors = [torch.tensor_split(t, self.n_partitions,dim=self.partition_axis) for t in tensors_l]
+        partitioned_tensors = sum(partitioned_tensors,())
+        pre_size = [t.element_size() * t.nelement() for t in partitioned_tensors]
+        partitioned_tensors = [pickle.dumps(t) for t in partitioned_tensors]
+        # print(type(partitioned_tensors), type(partitioned_tensors[0]))
+        compressed_tensors_l = mt_compress.mt_compress(partitioned_tensors)
+        compressed_tensors_l = [torch.tensor(np.frombuffer(t, dtype=np.uint8)) for t in compressed_tensors_l]
+        post_size = [t.element_size() * t.nelement() for t in compressed_tensors_l]
+        compression_rate = sum([s1 / s2 for s1, s2 in zip(pre_size, post_size)])
+        self.compression_rate.append(compression_rate)
+        return compressed_tensors_l
+
+    def decompress(self, channel_feat: List[Tensor], iter: int = 0):
+        channel_feat = [f.numpy().tobytes() for f in channel_feat]
+        tensors_l = mt_compress.mt_decompress(channel_feat)
+        tensors_l = [pickle.loads(t) for t in tensors_l]
+        tensors_l = [torch.cat(tensors_l[i:i+self.n_partitions],dim=self.partition_axis) for i in range(int(len(tensors_l)/self.n_partitions))]
+        return tensors_l
+
+# def _compress(t):
+#     return torch.tensor(np.frombuffer(bz2.compress(pickle.dumps(t)), dtype=np.uint8))
+    
+# def _decompress(f):
+#     return pickle.loads(bz2.decompress(f.numpy().tobytes()))
+
+# class MultiProcess_Bz2CompressorDecompressor(CompressorDecompressorBase):
+#     def __init__(self):
+#         super().__init__()
+#         self.compression_rate = []
+#         self.n_partitions = 3
+#         # self.n_partitions = multiprocessing.cpu_count()
+#         self.partition_axis = 0
+
+#     def compress(self, tensors_l: List[Tensor], iter: int = 0):
+#         partitioned_tensors = [torch.tensor_split(t, self.n_partitions,dim=self.partition_axis) for t in tensors_l]
+#         partitioned_tensors = sum(partitioned_tensors,())
+#         pre_size = [t.element_size() * t.nelement() for t in partitioned_tensors]
+#         with Pool(self.n_partitions) as pool:
+#             compressed_tensors_l = pool.map(_compress,partitioned_tensors)
+#         post_size = [t.element_size() * t.nelement() for t in compressed_tensors_l]
+#         compression_rate = sum([s1 / s2 for s1, s2 in zip(pre_size, post_size)])
+#         self.compression_rate.append(compression_rate)
+#         return compressed_tensors_l
+
+#     def decompress(self, channel_feat: List[Tensor], iter: int = 0):
+#         with Pool(self.n_partitions) as pool:
+#             partitioned_tensors = pool.map_async(_decompress,channel_feat)
+#             partitioned_tensors = partitioned_tensors.get()
+#             pool.close()
+#             pool.terminate()
+#         tensors_l = [torch.cat(partitioned_tensors[i:i+self.n_partitions],dim=self.partition_axis) for i in range(int(len(partitioned_tensors)/self.n_partitions))]
+#         return tensors_l
 
 class Bz2CompressorDecompressor(CompressorDecompressorBase):
     def __init__(self):

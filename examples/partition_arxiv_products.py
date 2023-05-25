@@ -44,7 +44,7 @@ parser.add_argument(
 parser.add_argument(
     "--partition-out-path",
     type=str,
-    default="./partition_data/",
+    default="./partition_data_2/",
     help="Path to the output directory for the partition data "
 )
 
@@ -86,7 +86,7 @@ def main():
         args.partition_out_path,
         num_hops=1,
         part_method="random",
-        reshuffle=True,
+        # reshuffle=True,
         balance_ntypes=train_mask,
         balance_edges=True)
 

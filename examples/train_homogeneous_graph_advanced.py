@@ -36,7 +36,8 @@ import sar
 from sar.core.compressor import \
     FeatureCompressorDecompressor, NodeCompressorDecompressor, SubgraphCompressorDecompressor
 from sar.core.compressor import PickleCompressorDecompressor, Bz2CompressorDecompressor
-from sar.core.compressor import ZlibCompressorDecompressor, LZMACompressorDecompressor
+from sar.core.compressor import LZMACompressorDecompressor
+# from sar.core.compressor import MT_GZipCompressorDecompressor
 from sar.config import Config
 
 
@@ -47,7 +48,7 @@ parser = ArgumentParser(
 parser.add_argument(
     "--partitioning-json-file",
     type=str,
-    default="./partition_data/ogbn-arxiv.json",
+    default="./partition_data_2/ogbn-arxiv.json",
     help="Path to the .json file containing partitioning information "
 )
 
@@ -123,14 +124,14 @@ parser.add_argument('--fed_agg_round', default=501, type=int,
 
 # Newly added arguments for compression decompression module
 parser.add_argument('--enable_cr', action='store_true',
-                    default=False, help="Turn on compression before \
+                    default=True, help="Turn on compression before \
                     sending to remote clients")
 
 parser.add_argument('--comp_ratio', default=None, type=int,
                     help="Compression ratio for sub-graph based compression")
 
 parser.add_argument('--compression_type', default="bz2_feature", type=str,
-                    choices=["zlib_feature", "lzma_feature", "bz2_feature", "pickle_feature", "lossy_feature", "node", "subgraph"],
+                    choices=["bz2_feature", "lzma_feature", "bz2_feature", "pickle_feature", "lossy_feature", "node", "subgraph"],
                     help="Choose among compression types")
 
 parser.add_argument('--enable_vcr', action='store_true',
@@ -423,8 +424,8 @@ def main():
                 comp_mod = PickleCompressorDecompressor()
             elif args.compression_type == "bz2_feature":
                 comp_mod = Bz2CompressorDecompressor()
-            elif args.compression_type == "zlib_feature":
-                comp_mod = ZlibCompressorDecompressor()
+            # elif args.compression_type == "mt_gzip_feature":
+                # comp_mod = MT_GZipCompressorDecompressor()
             elif args.compression_type == "lzma_feature":
                 comp_mod = LZMACompressorDecompressor()
             elif args.compression_type == "lossy_feature":
@@ -564,7 +565,7 @@ def main():
         df.at[train_iter_idx, "test_acc"] = test_acc .item()
         df.at[train_iter_idx, "model_acc"] = model_acc.item()
 
-    fname = "results/bz2_"+ str(args.rank) + ".csv" 
+    fname = "results/mt_"+ str(args.rank) + ".csv" 
     df.to_csv(fname, index=False)
 
 
