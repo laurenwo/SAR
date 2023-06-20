@@ -107,6 +107,7 @@ class ProxyDataView(MutableMapping):
             recv_tensors = list(recv_tensors)
             recv_tensors[rank()
                          ] = value[self.indices_required_from_me[rank()]]
+            # print([r.size() for r in recv_tensors])
 
             exchange_result = torch.cat(recv_tensors, dim=0)
 

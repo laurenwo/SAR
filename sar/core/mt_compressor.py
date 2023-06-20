@@ -11,18 +11,28 @@ mt_compress = load(name="mt_compress", sources=["compression/mt_compress.cpp"], 
 print("Loaded mt_compress", time.time()-t1)
 print()
 
+import fpzip
+tensors_l = np.random.standard_normal((50,100000))
+t1 = time.time()
+compressed_bytes = fpzip.compress(tensors_l, precision=0, order='C')
+print("Compression: ", time.time()-t1)
+t1 = time.time()
+data_again = fpzip.decompress(compressed_bytes, order='C') 
+print("Decompression: ", time.time()-t1)
+
+
 ax = 1
 results = []
 
-for j in range(1, 100):
+for j in range(1, 2):
 	print("N Partitions:", j)
 	curr_time = 0.0
 	curr_rate = 0.0
 	for k in range(10):
 		# tensors_l = [torch.rand(50,100000)]
-		tensors_l = [torch.ones(50,100000)]
+		# tensors_l = [torch.ones(50,100000)]
 		# tensors_l = [torch.reshape(torch.arange(5000000),(50,100000))]
-		# tensors_l = [torch.normal(0,1,size=(50,100000))]
+		tensors_l = [torch.normal(0,1,size=(50,100000))]
 		# print("Partitioning")
 		t1 = time.time()
 		partitioned_tensors = [torch.tensor_split(t, j,dim=ax) for t in tensors_l]
@@ -59,4 +69,4 @@ for j in range(1, 100):
 	print(curr_time, curr_rate)
 	results.append((curr_time, curr_rate))
 
-np.save("mt_compression_threads.npy", results)
+# np.save("mt_compression_threads.npy", results)

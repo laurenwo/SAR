@@ -37,7 +37,7 @@ from sar.core.compressor import \
     FeatureCompressorDecompressor, NodeCompressorDecompressor, SubgraphCompressorDecompressor
 from sar.core.compressor import PickleCompressorDecompressor, Bz2CompressorDecompressor
 from sar.core.compressor import LZMACompressorDecompressor
-# from sar.core.compressor import MT_GZipCompressorDecompressor
+from sar.core.compressor import FPZIPCompressorDecompressor
 from sar.config import Config
 
 
@@ -124,14 +124,14 @@ parser.add_argument('--fed_agg_round', default=501, type=int,
 
 # Newly added arguments for compression decompression module
 parser.add_argument('--enable_cr', action='store_true',
-                    default=True, help="Turn on compression before \
+                    default=False, help="Turn on compression before \
                     sending to remote clients")
 
 parser.add_argument('--comp_ratio', default=None, type=int,
                     help="Compression ratio for sub-graph based compression")
 
 parser.add_argument('--compression_type', default="bz2_feature", type=str,
-                    choices=["bz2_feature", "lzma_feature", "bz2_feature", "pickle_feature", "lossy_feature", "node", "subgraph"],
+                    choices=["fpzip_feature", "bz2_feature", "lzma_feature", "bz2_feature", "pickle_feature", "lossy_feature", "node", "subgraph"],
                     help="Choose among compression types")
 
 parser.add_argument('--enable_vcr', action='store_true',
@@ -424,8 +424,8 @@ def main():
                 comp_mod = PickleCompressorDecompressor()
             elif args.compression_type == "bz2_feature":
                 comp_mod = Bz2CompressorDecompressor()
-            # elif args.compression_type == "mt_gzip_feature":
-                # comp_mod = MT_GZipCompressorDecompressor()
+            elif args.compression_type == "fpzip_feature":
+                comp_mod = FPZIPCompressorDecompressor()
             elif args.compression_type == "lzma_feature":
                 comp_mod = LZMACompressorDecompressor()
             elif args.compression_type == "lossy_feature":
@@ -516,9 +516,9 @@ def main():
         df.at[train_iter_idx, "forward"] = forward_time
         df.at[train_iter_idx, "backward"] = backward_time
         df.at[train_iter_idx, "train"] = train_time 
-        df.at[train_iter_idx, "compression_rate_1"] = full_graph_manager._compression_decompression.compression_rate[0]
-        df.at[train_iter_idx, "compression_rate_2"] = full_graph_manager._compression_decompression.compression_rate[1]
-        df.at[train_iter_idx, "compression_rate_3"] = full_graph_manager._compression_decompression.compression_rate[2]
+        # df.at[train_iter_idx, "compression_rate_1"] = full_graph_manager._compression_decompression.compression_rate[0]
+        # df.at[train_iter_idx, "compression_rate_2"] = full_graph_manager._compression_decompression.compression_rate[1]
+        # df.at[train_iter_idx, "compression_rate_3"] = full_graph_manager._compression_decompression.compression_rate[2]
 
         t_1 = time.time()
         (train_loss, train_acc, val_loss, val_acc, test_loss, test_acc) = \
@@ -565,7 +565,7 @@ def main():
         df.at[train_iter_idx, "test_acc"] = test_acc .item()
         df.at[train_iter_idx, "model_acc"] = model_acc.item()
 
-    fname = "results/mt_"+ str(args.rank) + ".csv" 
+    fname = "results/fpzip_"+ str(args.rank) + ".csv" 
     df.to_csv(fname, index=False)
 
 

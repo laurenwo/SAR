@@ -2,7 +2,7 @@ __pycache__/
 */__pycache__/
 */*/__pycache__/
 .vscode/*
-partition_data/
+partition_data*
 */datasets/*
 log/
 */examples/log/
@@ -12,3 +12,6 @@ datasets/*
 results/
 docker/
 ip_file
+
+AdaSwarm/
+*/examples/AdaSwarm
