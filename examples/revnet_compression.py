@@ -9,7 +9,7 @@ import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
 
 import sar
-from models.revnet import RevNet
+from sar.core.models.revnet import RevNet
 
 from torch.autograd.grad_mode import no_grad
 from torch.autograd import Variable
